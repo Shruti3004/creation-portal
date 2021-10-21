@@ -110,11 +110,11 @@ module.exports = function (app) {
       })
     )
   // Proxy for content create ,update & review Start
-  app.use([
+  /*app.use([
     '/action/content/v3/create',
     '/action/content/v3/hierarchy/add',
     '/action/content/v3/hierarchy/remove',
-    '/action/content/v3/hierarchy/*',
+    '/action/content/v3/hierarchy/!*',
     '/action/content/v3/import'
   ],
   bodyParser.json({ limit: '50mb' }),
@@ -128,7 +128,7 @@ module.exports = function (app) {
   }))
 
   app.use([
-    '/action/content/v3/update/*'
+    '/action/content/v3/update/!*'
   ],
   bodyParser.json({ limit: '50mb' }),
   proxy(kp_content_service_base_url, {
@@ -140,7 +140,7 @@ module.exports = function (app) {
     }
   }))
 
-  app.post('/action/content/v3/upload/*',
+  app.post('/action/content/v3/upload/!*',
     proxy(kp_content_service_base_url, {
       preserveHostHdr: true,
       limit: reqDataLimitOfContentUpload,
@@ -189,7 +189,7 @@ module.exports = function (app) {
     }
   }))
 
-  app.use(['/action/object/category/*'],
+  app.use(['/action/object/category/!*'],
     proxy(contentServiceBaseUrl, {
       proxyReqOptDecorator: proxyUtils.decorateRequestHeaders(),
       proxyReqPathResolver: function(req) {
@@ -197,7 +197,7 @@ module.exports = function (app) {
           originalUrl = originalUrl.replace('/action/', '')
           return require('url').parse(contentServiceBaseUrl + originalUrl).path
       }
-  }))
+  }))*/
   // Proxy for content create , update & review END
 
   app.use('/action/content/v3/unlisted/publish/:contentId', permissionsHelper.checkPermission(),

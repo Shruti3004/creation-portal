@@ -119,11 +119,9 @@ export class ChapterListComponent implements OnInit, OnChanges, OnDestroy, After
   private portalVersion: string;
   public defaultFileSize: any;
   public defaultVideoSize: any;
-  filterConfig;
   dynamicHeaders = [];
-  filterValues = {};
-  showFiltersModal = false;
   masterCollectionHierarchy = [];
+  tags = [];
 
   constructor(public publicDataService: PublicDataService, public configService: ConfigService,
     private userService: UserService, public actionService: ActionService,
@@ -230,104 +228,7 @@ export class ChapterListComponent implements OnInit, OnChanges, OnDestroy, After
 
     this.selectedStatusOptions = ["Live", "Approved"];
     this.displayPrintPreview = _.get(this.collection, 'printable', false);
-    // this.filterConfig = _.get(this.collection, 'searchConfig', null);
     // this.dynamicHeaders = _.get(this.collection, 'headers', []);
-    this.filterConfig = [
-      {
-        "code": "status",
-        "editable": true,
-        "displayProperty": "Editable",
-        "dataType": "text",
-        "renderingHints": {
-          "semanticColumnWidth": "six"
-        },
-        "description": "Status",
-        "index": 2,
-        "label": "Status",
-        "default": 0,
-        "name": "Status",
-        "inputType": "select",
-        "terms": [
-          {
-            "name": "Live"
-          },
-          {
-            "name": "Corrections Pending"
-          },
-          {
-            "name": "Approved"
-          },
-          {
-            "name": "Rejected"
-          },
-          {
-            "name": "Draft"
-          }
-        ],
-        "placeholder": "Select Status"
-      },
-      {
-        "code": "questionCategories",
-        "editable": true,
-        "displayProperty": "Editable",
-        "dataType": "text",
-        "renderingHints": {
-          "semanticColumnWidth": "six"
-        },
-        "description": "Question Types",
-        "index": 2,
-        "label": "Question Types",
-        "default": 0,
-        "required": true,
-        "name": "Question Types",
-        "inputType": "select",
-        "terms": [
-          {
-            "name": "Objective"
-          },
-          {
-            "name": "VSA"
-          },
-          {
-            "name": "SA"
-          },
-          {
-            "name": "LA"
-          },
-          {
-            "name": "MCQ"
-          }
-        ],
-        "placeholder": "Question Types"
-      },
-      {
-        "code": "bloomsLevel",
-        "editable": true,
-        "displayProperty": "Editable",
-        "dataType": "text",
-        "renderingHints": {
-          "semanticColumnWidth": "twelve"
-        },
-        "label": "Skills Tested",
-        "required": true,
-        "name": "Learning Levels",
-        "index": 2,
-        "inputType": "select",
-        "placeholder": "Select Skill Type",
-        "default": 0,
-        "terms": [
-          {
-            "name": "remember"
-          },
-          {
-            "name": "understand"
-          },
-          {
-            "name": "apply"
-          }
-        ]
-      }
-    ];
     this.dynamicHeaders = [
       {"label": "Question Type", "key": "questionCategories"},
       {"label": "Skill Tested", "key": "bloomsLevel"},
@@ -500,7 +401,7 @@ export class ChapterListComponent implements OnInit, OnChanges, OnDestroy, After
       // tslint:disable-next-line:max-line-length
       this.programsService.getCategoryDefinition(this.programContext.target_collection_category[0], this.programContext.rootorg_id,
         'Collection').subscribe(res => {
-        const objectCategoryDefinition = res.result.objectCategoryDefinition;
+        const objectCategoryDefinition = res.result.objectCategoryDefinition;       
         // tslint:disable-next-line:max-line-length
         if (_.has(objectCategoryDefinition.objectMetadata.config, 'sourcingSettings.collection.hierarchy.level1.name')) {
           // tslint:disable-next-line:max-line-length
@@ -525,6 +426,18 @@ export class ChapterListComponent implements OnInit, OnChanges, OnDestroy, After
           this.setLocalBlueprint();
         }
 
+        if(objectCategoryDefinition && objectCategoryDefinition.forms.childMetadata.properties && this.frameworkService.orgFrameworkCategories){
+          _.forEach(this.frameworkService.orgFrameworkCategories, (orgFrameworkCategory) => {
+            _.forEach(objectCategoryDefinition.forms.childMetadata.properties, (prop) => {
+              if(prop.code == orgFrameworkCategory.code){
+                if(this.tags.length < 2){
+                  this.tags.push(prop.code);
+                }
+              }             
+            });
+          });
+        }
+        
         this.levelOneChapterList.push({
           identifier: 'all',
           // tslint:disable-next-line:max-line-length
@@ -1770,63 +1683,5 @@ export class ChapterListComponent implements OnInit, OnChanges, OnDestroy, After
       },
       searchFormConfig: this.searchConfig.properties
     };
-  }
-
-  openFilter() {
-    let isFirstTime = true;
-    _.forEach(this.filterConfig, (formFieldCategory) => {
-      if (formFieldCategory.code === 'topic') {
-        formFieldCategory.terms = this.sessionContext.topicList;
-      }
-      if (this.filterValues[formFieldCategory.code]) {
-        isFirstTime = false;
-        formFieldCategory.default = this.filterValues[formFieldCategory.code];
-      }
-    });
-    if (isFirstTime) {
-      this.masterCollectionHierarchy = _.cloneDeep(this.collectionHierarchy);
-    }
-    this.showFiltersModal = true;
-  }
-
-  filterValueChanges(event) {
-    this.filterValues = event;
-  }
-
-  applyFilter(resetFilter?) {
-    this.collectionHierarchy = _.cloneDeep(this.masterCollectionHierarchy);
-    this.showFiltersModal = false;
-    if (resetFilter) {
-      this.filterValues = {};
-      this.masterCollectionHierarchy = [];
-      return;
-    }
-
-    _.forEach(this.collectionHierarchy, collectionHierarchy => {
-      const filteredLeaf = [];
-      _.forEach(collectionHierarchy.leaf, leaf => {
-        _.forOwn(this.filterValues, (value, key) => {
-          if (value && leaf.hasOwnProperty(key)) {
-            if (_.isArray(value) && _.isArray(leaf[key])) {
-              if (_.intersection(value, leaf[key]).length) {
-                filteredLeaf.push(leaf);
-              }
-            } else if (_.isArray(value) && !_.isArray(leaf[key])) {
-              if (value.indexOf(leaf[key]) !== -1) {
-                filteredLeaf.push(leaf);
-              }
-            } else if (!_.isArray(value) && _.isArray(leaf[key])) {
-              if (leaf[key].indexOf(value) !== -1) {
-                filteredLeaf.push(leaf);
-              }
-            } else if (value === leaf[key]) {
-              filteredLeaf.push(leaf);
-            }
-          }
-        });
-      });
-
-      collectionHierarchy.leaf = filteredLeaf;
-    });
   }
 }

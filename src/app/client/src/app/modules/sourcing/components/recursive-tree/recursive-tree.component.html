@@ -127,7 +127,7 @@
       <div class="chapter-lists level1" *ngIf="collection.leaf">
         <div class="header chapter-lists--item">
           <span class="item-name item-sno">S.No</span>
-          <span class="item-name">Name</span>
+          <span class="item-name">name</span>
           <ng-container *ngFor="let header of dynamicHeaders">
             <span class="item-name">{{header.label}}</span>
           </ng-container>
@@ -144,7 +144,10 @@
           [telemetryInteractPdata]="telemetryInteractPdata"
           (click)="previewResource($event, content, collection, originalCollectionData, i)">
             <span class="item-name item-sno"> {{getSerialNumber(collection, ind)}}</span>
-            <span class="item-name"> {{content.name}}</span>
+            <span class="item-name"> {{content.name}}<br />
+              <ng-container *ngFor="let tag of tags">
+                <span *ngIf="content[tag]" class="item-tag">{{content[tag]}}</span>
+              </ng-container></span>
             <ng-container *ngFor="let header of dynamicHeaders">
               <span class="item-name">{{content[header.key] || '-'}}</span>
             </ng-container>

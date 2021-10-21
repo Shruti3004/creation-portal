@@ -192,11 +192,7 @@
           <div class="d-flex flex-jc-space-between fs-0-785 sb-color-gray-300 mb-15">
             <span *ngIf="textbookStatusMessage" class="sb-color-error mr-8 pl-10 fs-0-785 font-weight-bold font-italic w-30">{{textbookStatusMessage}}</span>
             <span class="w-30 font-italic">{{resourceService?.frmelmnts?.lbl?.partialTextbookSelectionNote | interpolate:'{TARGET_NAME}': targetCollection | interpolate:'{contentTypeUnit}': firstLevelFolderLabel | interpolate:'{contentTypeUnit}': firstLevelFolderLabel}} </span>
-            <div class="d-flex">
-              <button type="button" class="sb-btn sb-btn-normal sb-btn-outline-primary mx-10" (click)="openFilter()" *ngIf="this.filterConfig">
-                <i class="filter icon"></i>
-                {{resourceService?.frmelmnts?.btn?.applyFilter}}
-              </button>
+            <div class="d-flex">              
               <div *ngIf="sourcingOrgReviewer && storedCollectionData && !sessionContext.nominationDetails && programsService.isProjectLive(programContext)" class="d-flex">
                 <app-bulk-approval [programContext]="programContext" [sessionContext]="sessionContext" [storedCollectionData]="storedCollectionData" [originalCollectionData]="originalCollectionData" (updateToc)="bulkApprovalSuccess($event)"></app-bulk-approval>
               </div>
@@ -215,7 +211,7 @@
           </div>
           <div class="sb-chapterlist">
             <sui-accordion class="styled fluid sb-accordion sb-chapterlist-accordion" [closeOthers]="true">
-              <app-recursive-tree [collectionUnits]="collectionHierarchy" [level]="1" [programContext]="programContext" [sessionContext]="sessionContext" [selectedChapter]="selectedChapterOption" [originalCollectionData]="originalCollectionData" [dynamicHeaders]="dynamicHeaders"
+              <app-recursive-tree [collectionUnits]="collectionHierarchy" [level]="1" [programContext]="programContext" [sessionContext]="sessionContext" [selectedChapter]="selectedChapterOption" [originalCollectionData]="originalCollectionData" [dynamicHeaders]="dynamicHeaders" [tags]="tags"
               [selectedStatus]="selectedStatusOptions" (nodeMeta)="showResourceTemplate($event)"></app-recursive-tree>
             </sui-accordion>
           </div>
@@ -412,25 +408,7 @@
 		</button>
 	</div>
 </sui-modal>
-<sui-modal *ngIf="showFiltersModal" [mustScroll]="true" #modal [isClosable]="true" [transitionDuration]="0" [size]="'normal'" class="sb-modal applyFilter-modal"
-           appBodyScroll (dismissed)="showFiltersModal = false">
-  <div class="sb-modal-header">
-    {{resourceService?.frmelmnts?.lbl?.applyFilters}}
-  </div>
-  <div class="sb-modal-content">
-    <sb-dynamic-form *ngIf="this.filterConfig" [config]="this.filterConfig"
-                     (valueChanges)="filterValueChanges($event)">
-    </sb-dynamic-form>
-  </div>
-  <div class="sb-modal-actions py-20">
-    <button type="button" class="sb-btn sb-btn-normal sb-btn-primary" (click)="applyFilter()">
-      {{resourceService?.frmelmnts?.btn?.apply}}
-    </button>
-    <button type="button" class="sb-btn sb-btn-normal sb-btn-outline-primary" (click)="applyFilter('resetFilter')">
-      {{resourceService?.frmelmnts?.btn?.reset}}
-    </button>
-  </div>
-</sui-modal>
+
 <sui-modal *ngIf="showRemoveConfirmationModal" [mustScroll]="true" [isClosable]="true" [transitionDuration]="0"
   [size]="'normal'" class="sb-modal" appBodyScroll (dismissed)="showRemoveConfirmationModal = false" #modal>
   <div class="sb-modal-header">

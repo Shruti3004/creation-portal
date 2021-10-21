@@ -76,6 +76,13 @@
     flex: 0.5;
   }
 
+  .item-tag{
+    background: $gray-100;
+    padding: $base-block-space * 0.5;    
+    border-radius: $base-block-space;
+    margin-right: $base-block-space;
+  }
+
   .item-status {
     flex: 1;
   }
