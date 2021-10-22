@@ -122,6 +122,7 @@ export class ChapterListComponent implements OnInit, OnChanges, OnDestroy, After
   dynamicHeaders = [];
   masterCollectionHierarchy = [];
   tags = [];
+  maxNumberOfTags;
 
   constructor(public publicDataService: PublicDataService, public configService: ConfigService,
     private userService: UserService, public actionService: ActionService,
@@ -228,12 +229,8 @@ export class ChapterListComponent implements OnInit, OnChanges, OnDestroy, After
 
     this.selectedStatusOptions = ["Live", "Approved"];
     this.displayPrintPreview = _.get(this.collection, 'printable', false);
-    // this.dynamicHeaders = _.get(this.collection, 'headers', []);
-    this.dynamicHeaders = [
-      {"label": "Question Type", "key": "questionCategories"},
-      {"label": "Skill Tested", "key": "bloomsLevel"},
-      {"label": "Topic", "key": "topic"}
-    ];
+    this.dynamicHeaders = _.get(this.collection, 'headers', []);
+    this.maxNumberOfTags = _.get(this.collection, 'maxNumberOfTags', []);   
   }
 
   setUserAccess() {
@@ -426,18 +423,18 @@ export class ChapterListComponent implements OnInit, OnChanges, OnDestroy, After
           this.setLocalBlueprint();
         }
 
-        if(objectCategoryDefinition && objectCategoryDefinition.forms.childMetadata.properties && this.frameworkService.orgFrameworkCategories){
+        if (_.has(objectCategoryDefinition, "forms.childMetadata.properties") && this.frameworkService.orgFrameworkCategories) {
           _.forEach(this.frameworkService.orgFrameworkCategories, (orgFrameworkCategory) => {
             _.forEach(objectCategoryDefinition.forms.childMetadata.properties, (prop) => {
-              if(prop.code == orgFrameworkCategory.code){
-                if(this.tags.length < 2){
+              if(prop.code == orgFrameworkCategory.code && prop.editable){               
+                if(this.tags.length < this.maxNumberOfTags){
                   this.tags.push(prop.code);
                 }
-              }             
+              }
             });
           });
         }
-        
+
         this.levelOneChapterList.push({
           identifier: 'all',
           // tslint:disable-next-line:max-line-length
