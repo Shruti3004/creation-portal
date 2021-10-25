@@ -122,7 +122,7 @@ export class ChapterListComponent implements OnInit, OnChanges, OnDestroy, After
   dynamicHeaders = [];
   masterCollectionHierarchy = [];
   tags = [];
-  maxNumberOfTags;
+  maxNumberOfTags: number = 2;
 
   constructor(public publicDataService: PublicDataService, public configService: ConfigService,
     private userService: UserService, public actionService: ActionService,
@@ -230,7 +230,7 @@ export class ChapterListComponent implements OnInit, OnChanges, OnDestroy, After
     this.selectedStatusOptions = ["Live", "Approved"];
     this.displayPrintPreview = _.get(this.collection, 'printable', false);
     this.dynamicHeaders = _.get(this.collection, 'headers', []);
-    this.maxNumberOfTags = _.get(this.collection, 'maxNumberOfTags', []);   
+    this.maxNumberOfTags = _.get(this.collection, 'maxNumberOfTags', 2);   
   }
 
   setUserAccess() {
@@ -425,12 +425,10 @@ export class ChapterListComponent implements OnInit, OnChanges, OnDestroy, After
 
         if (_.has(objectCategoryDefinition, "forms.childMetadata.properties") && this.frameworkService.orgFrameworkCategories) {
           _.forEach(this.frameworkService.orgFrameworkCategories, (orgFrameworkCategory) => {
-            _.forEach(objectCategoryDefinition.forms.childMetadata.properties, (prop) => {
-              if(prop.code == orgFrameworkCategory.code && prop.editable){               
-                if(this.tags.length < this.maxNumberOfTags){
-                  this.tags.push(prop.code);
-                }
-              }
+            _.forEach(objectCategoryDefinition.forms.childMetadata.properties, (prop) => {              
+              if(prop.code == orgFrameworkCategory.code && prop.editable){                               
+                this.tags.push(prop.code);                              
+              }              
             });
           });
         }
@@ -978,7 +976,10 @@ export class ChapterListComponent implements OnInit, OnChanges, OnDestroy, After
       sampleContent: node.sampleContent || null,
       sharedContext: {
         ...sharedMeta
-      }
+      },
+      board: node.board,
+      gradeLevel: node.gradeLevel,
+      learningOutcome: node.learningOutcome,
     };
     return nodeMeta;
   }

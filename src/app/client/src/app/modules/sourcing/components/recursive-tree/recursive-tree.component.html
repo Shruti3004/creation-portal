@@ -146,7 +146,7 @@
             <span class="item-name item-sno"> {{getSerialNumber(collection, ind)}}</span>
             <span class="item-name"> {{content.name}}<br />
               <ng-container *ngFor="let tag of tags">
-                <span *ngIf="content[tag]" class="item-tag">{{content[tag]}}</span>
+                <span *ngIf="content[tag]" class="item-tag">{{content[tag]}}</span>                
               </ng-container></span>
             <ng-container *ngFor="let header of dynamicHeaders">
               <span class="item-name">{{content[header.key] || '-'}}</span>
