@@ -120,7 +120,7 @@ export class ChapterListComponent implements OnInit, OnChanges, OnDestroy, After
   public defaultFileSize: any;
   public defaultVideoSize: any;
   configUrl;
-  dynamicHeaders;
+  dynamicHeaders = [];
   masterCollectionHierarchy = [];
   tags = [];
   maxNumberOfTags: number = 2;
@@ -153,8 +153,10 @@ export class ChapterListComponent implements OnInit, OnChanges, OnDestroy, After
       this.state.stages = state.stages;
       this.changeView();
     });
-    this.helperService.getDynamicHeaders(this.configUrl).subscribe(state => {
-      this.dynamicHeaders = state;      
+    this.helperService.getDynamicHeaders(this.configUrl).subscribe((state: any) => {
+      if(_.has(state, "headers")){
+        this.dynamicHeaders = state.headers;
+      }
     });
     this.currentStage = 'chapterListComponent';    
     this.sessionContext = _.get(this.chapterListComponentInput, 'sessionContext');

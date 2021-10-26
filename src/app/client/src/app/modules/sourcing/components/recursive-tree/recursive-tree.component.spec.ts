@@ -172,7 +172,7 @@ xdescribe('RecursiveTreeComponent', () => {
   });
 
   it('should check dynamic headers', () => {
-    if(component.dynamicHeaders.length == 0){
+    if(component.dynamicHeaders && component.dynamicHeaders.length == 0){
       expect(fixture.debugElement.query(By.css('.dynamic-header'))).toBeUndefined(); 
     }else{
       expect(fixture.debugElement.query(By.css('.dynamic-header'))).toBeDefined(); 
