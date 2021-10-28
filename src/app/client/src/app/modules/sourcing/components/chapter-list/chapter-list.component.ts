@@ -111,6 +111,7 @@ export class ChapterListComponent implements OnInit, OnChanges, OnDestroy, After
   public firstLevelFolderLabel: string;
 
   public addFormLibraryInput = {};
+  public reusedContributions = [];
   editorConfig: any;
   searchConfig;
   collectionSourcingConfig;
@@ -120,7 +121,8 @@ export class ChapterListComponent implements OnInit, OnChanges, OnDestroy, After
   public defaultFileSize: any;
   public defaultVideoSize: any;
   configUrl;
-  dynamicHeaders = [];
+  dynamicHeaders = [{"label": "Question Type", "key": "questionCategories"},
+  {"label": "Skill Tested", "key": "bloomsLevel"}  ];
   masterCollectionHierarchy = [];
   tags = [];
   maxNumberOfTags: number = 2;
@@ -393,6 +395,38 @@ export class ChapterListComponent implements OnInit, OnChanges, OnDestroy, After
     }
   }
 
+  mapBlueprintData(blueprintCreate){
+    let isOldBlueprintForm = false;
+    blueprintCreate.properties.forEach(element => {
+      if(element.fields == undefined){
+        isOldBlueprintForm = true;
+      }
+    });
+    let localBlueprintMap = _.get(this.programContext, "config.blueprintMap");
+    let localBlueprintData = _.get(localBlueprintMap, `${this.collection && this.collection.code}`);
+
+    if (isOldBlueprintForm){
+      _.forEach(localBlueprintData, (prop, key) => {
+          if (key === 'learningOutcomes'){
+            localBlueprintData['learningoutcome'] = _.map(prop, data => {
+              return data.name;
+            });
+          }
+          if (key === 'topics'){
+            localBlueprintData['topic'] = _.map(prop, data => {
+              return data.name;
+            });
+          }
+          _.forEach(prop, (element, keyValue) => {
+            if (key === "questionTypes" || key === "learningLevels"){
+              localBlueprintData[keyValue] = element;
+            }
+          });
+      });
+    }
+    return localBlueprintData;
+  }
+
   viewBlueprint(): void {
     this.viewBlueprintFlag = true;
   }
@@ -416,13 +450,7 @@ export class ChapterListComponent implements OnInit, OnChanges, OnDestroy, After
           this.firstLevelFolderLabel = _.get(this.resourceService, 'frmelmnts.lbl.deafultFirstLevelFolders');
         }
 
-        if (_.has(objectCategoryDefinition.objectMetadata, 'config.sourcingSettings.collection')) {
-          this.collectionSourcingConfig = _.get(objectCategoryDefinition.objectMetadata, 'config.sourcingSettings.collection');
-          this.sessionContext['addFromLibraryBetaEnabled'] = this.collectionSourcingConfig.addFromLibraryBetaEnabled;
-        }
-
         if (objectCategoryDefinition && objectCategoryDefinition.forms) {
-          this.searchConfig = objectCategoryDefinition.forms.searchConfig;
           this.blueprintTemplate = objectCategoryDefinition.forms.blueprintCreate;
           if (this.blueprintTemplate && this.blueprintTemplate.properties) {
             _.forEach(this.blueprintTemplate.properties, (prop) => {
@@ -600,6 +628,7 @@ export class ChapterListComponent implements OnInit, OnChanges, OnDestroy, After
 
         response.result.content.children = children;
         this.collectionData = response.result.content;
+        this.reusedContributions = _.get(this.collectionData, 'reusedContributions') || [];
         this.storedCollectionData = unitIdentifier ?  this.storedCollectionData : _.cloneDeep(this.collectionData);
         if (this.storedCollectionData['channel'] !== this.programContext.rootorg_id) {
           this.storedCollectionData['channel'] = this.programContext.rootorg_id;
@@ -802,7 +831,10 @@ export class ChapterListComponent implements OnInit, OnChanges, OnDestroy, After
         }
         return treeItem;
       });
-      return tree;
+      // Sorting leaf node based on created time
+      return _.orderBy(tree, (node) => {
+        return new Date(node.createdOn);
+      });
     }
   }
 
@@ -936,13 +968,14 @@ export class ChapterListComponent implements OnInit, OnChanges, OnDestroy, After
                   }
                 })
               }
+
               if(data.learningOutcome && data.learningOutcome.length) {
                 _.forEach(data.learningOutcome, (lo)=> {
                   if(_.includes(this.localUniqueLearningOutcomesList, lo)) return;
                   else {
                     this.localUniqueLearningOutcomesList.push(lo);
                     this.countData['learningOutcomes'] = this.countData['learningOutcomes'] + 1;
-                    this.learningOutcomesInsideBlueprint = this.learningOutcomesInsideBlueprint && _.some(this.localBlueprint.learningOutcomes, {name: lo})
+                      this.learningOutcomesInsideBlueprint = this.learningOutcomesInsideBlueprint && _.some(this.localBlueprint.learningOutcomes, {name: lo})
                   }
                 })
               }
@@ -982,6 +1015,7 @@ export class ChapterListComponent implements OnInit, OnChanges, OnDestroy, After
       organisationId: _.has(node, 'organisationId') ? node.organisationId : null,
       prevStatus: node.prevStatus || null,
       sourceURL : node.sourceURL,
+      createdOn : node.createdOn,
       sampleContent: node.sampleContent || null,
       sharedContext: {
         ...sharedMeta
@@ -1056,7 +1090,7 @@ export class ChapterListComponent implements OnInit, OnChanges, OnDestroy, After
         } else if (content.status === 'Live' && content.sourceURL) {
           return true;
         }
-      } else if (reviewerViewRole && (content.status === 'Review' || content.status === 'Live' || (content.prevStatus === 'Review' && content.status === 'Draft' ) || (content.prevStatus === 'Live' && content.status === 'Draft' ))
+      } else if (reviewerViewRole && (content.status === 'Review' || content.status === 'Live' || (content.prevStatus === 'Review' && content.status === 'Draft' ) || (content.prevStatus === 'Live' && content.status === 'Draft' ) || content.status === 'Processing')
       && this.currentUserID !== content.createdBy
       && content.organisationId === this.myOrgId) {
         return true;
@@ -1065,6 +1099,8 @@ export class ChapterListComponent implements OnInit, OnChanges, OnDestroy, After
       } else if (contributingOrgAdmin && content.organisationId === this.myOrgId) {
         return true;
       } else if (content.status === 'Live' && content.sourceURL) {
+        return true;
+      } else if (this.reusedContributions.indexOf(content.identifier) !== -1 && this.sessionContext['addFromLibraryBetaEnabled']) {
         return true;
       }
     }
@@ -1188,10 +1224,6 @@ export class ChapterListComponent implements OnInit, OnChanges, OnDestroy, After
         this.contentId = event.content.identifier;
         this.handlePreview(event);
         break;
-      case 'addFromLibrary':
-        this.currentStage = 'addFromLibrary';
-        this.setAddLibraryInput();
-        break;
       default:
         this.showResourceTemplatePopup = event.showPopup;
         break;
@@ -1301,7 +1333,7 @@ export class ChapterListComponent implements OnInit, OnChanges, OnDestroy, After
     });
   }
 
-  public addResourceToHierarchy(contentId) {
+  public addResourceToHierarchy(contentId, isAddedFromLibrary = false) {
     const req = {
       url: this.configService.urlConFig.URLS.CONTENT.HIERARCHY_ADD,
       data: {
@@ -1315,8 +1347,33 @@ export class ChapterListComponent implements OnInit, OnChanges, OnDestroy, After
     this.actionService.patch(req).pipe(map((data: any) => data.result), catchError(err => {
       return throwError('');
     })).subscribe(res => {
-      this.updateAccordianView();
+      if (isAddedFromLibrary) {
+        this.updateContentReusedContribution();
+      } else {
+        this.updateAccordianView();
+      }
       console.log('result ', res);
+    });
+  }
+
+  public updateContentReusedContribution() {
+    const option = {
+      url: 'content/v3/read/' + this.sessionContext.collection,
+      param: { 'mode': 'edit', 'fields': 'acceptedContents,versionKey' }
+    };
+    this.actionService.get(option).pipe(map((res: any) => res.result.content)).subscribe((data) => {
+      const request = {
+        content: {
+          'versionKey': data.versionKey,
+          reusedContributions: this.reusedContributions
+        }
+      };
+      // tslint:disable-next-line:max-line-length
+      this.helperService.updateContent(request, this.sessionContext.collection).subscribe(res => {
+        this.updateAccordianView();
+      }, err => {
+        this.toasterService.error(this.resourceService.messages.emsg.bulkApprove.updateToc);
+      });
     });
   }
 
@@ -1649,11 +1706,11 @@ export class ChapterListComponent implements OnInit, OnChanges, OnDestroy, After
   isSkipTwoLevelReviewEnabled() {
     return !!(_.get(this.programContext, 'config.defaultContributeOrgReview') === false);
   }
-
   onLibraryChange(event) {
     switch (event.action) {
       case 'add':
-        this.addResourceToHierarchy(event.collectionId);
+        this.reusedContributions.push(event.collectionId);
+        this.addResourceToHierarchy(event.collectionId, true);
         break;
     }
     this.currentStage = 'chapterListComponent';

@@ -16,6 +16,7 @@ export class CollectionHierarchyService {
   public sampleDataCount = 0;
   public currentUserID;
   private _programDetails;
+  private _preferencefilters;
   constructor(private actionService: ActionService, private configService: ConfigService,
     public toasterService: ToasterService, public userService: UserService,
     public telemetryService: TelemetryService, private httpClient: HttpClient,
@@ -118,7 +119,7 @@ export class CollectionHierarchyService {
             status: ['Draft', 'Live'],
             primaryCategory: !_.isNull(primaryCategory) ? primaryCategory : 'Digital Textbook'
           },
-          fields: ['name', 'gradeLevel', 'mimeType', 'medium', 'subject', 'status', 'chapterCount', 'chapterCountForContribution'],
+          fields: ['name', 'gradeLevel', 'mimeType', 'medium', 'subject', 'status', 'chapterCount', 'chapterCountForContribution', 'primaryCategory'],
           limit: 1000
         }
       }
@@ -185,7 +186,7 @@ export class CollectionHierarchyService {
       individualStatus: collectionsByStatus,
       individualStatusForSample: collectionsByStatusForSample,
       mvcContributionsCount: this.getMvcContentCounts(collections),
-      ...(!_.isUndefined(collections) && {sourcingOrgStatus : sourcingOrgStatus})
+      ...((!_.isUndefined(collections) || (this._programDetails && this._programDetails.target_type === 'searchCriteria')) && {sourcingOrgStatus : sourcingOrgStatus})
     };
   }
   getMvcContentCounts(collections) {
@@ -225,8 +226,8 @@ export class CollectionHierarchyService {
       }
       let allAcceptedContentIds, allRejectedContentIds = [];
       if (this._programDetails && this._programDetails.target_type === 'searchCriteria') {
-        allAcceptedContentIds = _.uniq(this._programDetails.config.acceptedContents);
-        allRejectedContentIds = _.uniq(this._programDetails.config.rejectedContents);
+        allAcceptedContentIds = _.uniq(this._programDetails.acceptedcontents);
+        allRejectedContentIds = _.uniq(this._programDetails.rejectedcontents);
       } else {
         allAcceptedContentIds = _.flatten(_.map(collections, 'acceptedContents'));
         allRejectedContentIds = _.flatten(_.map(collections, 'rejectedContents'));
@@ -263,7 +264,7 @@ export class CollectionHierarchyService {
     tempcontentGroupByStatus['correctionsPending'] = _.has(contentGroupByStatus, 'Draft') ?
     this.getRejectOrDraft(contentGroupByStatus['Draft'], 'correctionsPending') : [];
     const contentGroupByStatusForSample = this.groupStatusForCollections(groupedByCollectionIdForSample);
-    if (!_.isUndefined(collections)) {
+    if (!_.isUndefined(collections) || (this._programDetails && this._programDetails.target_type === 'searchCriteria')) {
       sourcingOrgStatus = this.getSourcingOrgStatus(collections, contentGroupByStatus);
     }
     return  {
@@ -275,7 +276,7 @@ export class CollectionHierarchyService {
       correctionsPending: _.has(tempcontentGroupByStatus, 'correctionsPending') ? tempcontentGroupByStatus.correctionsPending.length : 0,
       live: _.has(contentGroupByStatus, 'Live') ? contentGroupByStatus.Live.length : 0,
       individualStatusForSample: contentGroupByStatusForSample,
-      ...(!_.isUndefined(collections) && {sourcingOrgStatus : sourcingOrgStatus})
+      ...((!_.isUndefined(collections) || (this._programDetails && this._programDetails.target_type === 'searchCriteria')) && {sourcingOrgStatus : sourcingOrgStatus})
      };
   }
 
@@ -308,7 +309,40 @@ export class CollectionHierarchyService {
     });
     return collectionWithReject;
   }
-  
+  set preferencefilters(preferences) {
+    this._preferencefilters = preferences;
+  }
+  getnonCollectionProgramContents(programId) {
+    const option = {
+      url: 'composite/v3/search',
+      data: {
+        request: {
+          filters: {
+            objectType: ['content', 'questionset'],
+            programId: programId,
+            status: ['Draft', 'Review', 'Live', 'Processing'],
+            mimeType: {'!=': 'application/vnd.ekstep.content-collection'},
+            contentType: {'!=': 'Asset'}
+          },
+          not_exists: ['sampleContent'],
+          limit: 10000
+        }
+      }
+    };
+    if (!isUndefined(this._preferencefilters)) {
+      if (!_.isEmpty(_.get(this._preferencefilters, 'medium'))) {
+        option.data.request.filters['medium'] = _.get(this._preferencefilters, 'medium');
+      }
+      if (!_.isEmpty(_.get(this._preferencefilters, 'gradeLevel'))) {
+        option.data.request.filters['gradeLevel'] = _.get(this._preferencefilters, 'gradeLevel');
+      }
+      if (!_.isEmpty(_.get(this._preferencefilters, 'subject'))) {
+        option.data.request.filters['subject'] = _.get(this._preferencefilters, 'subject');
+      }
+    }
+
+    return this.actionService.post(option);
+  }
   getContentAggregation(programId, sampleContentCheck?, organisationId?, userId?, onlyCount?, allFields=false) {
     const option = {
       url: 'composite/v3/search',
@@ -317,7 +351,7 @@ export class CollectionHierarchyService {
           filters: {
             objectType: ['content', 'questionset'],
             programId: programId,
-            status: [],
+            status: ['Draft', 'Review', 'Live', 'Processing'],
             mimeType: {'!=': 'application/vnd.ekstep.content-collection'},
             contentType: {'!=': 'Asset'}
           },
@@ -356,6 +390,19 @@ export class CollectionHierarchyService {
     if (!_.isUndefined(onlyCount)) {
       option.data.request['limit'] = 0;
     }
+
+    if (!isUndefined(this._preferencefilters)) {
+      if (!_.isEmpty(_.get(this._preferencefilters, 'medium'))) {
+        option.data.request.filters['medium'] = _.get(this._preferencefilters, 'medium');
+      }
+      if (!_.isEmpty(_.get(this._preferencefilters, 'gradeLevel'))) {
+        option.data.request.filters['gradeLevel'] = _.get(this._preferencefilters, 'gradeLevel');
+      }
+      if (!_.isEmpty(_.get(this._preferencefilters, 'subject'))) {
+        option.data.request.filters['subject'] = _.get(this._preferencefilters, 'subject');
+      }
+    }
+
     return this.actionService.post(option);
   }
 

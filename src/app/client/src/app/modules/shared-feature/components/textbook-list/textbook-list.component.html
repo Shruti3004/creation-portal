@@ -50,6 +50,13 @@
 								<i class="fa fa-sort-desc" aria-hidden="true" [ngClass]="{'sb-color-gray-100':direction == 'desc'}"></i>
 							</span>
 						</th>
+						<th class="cursor-pointer sb-sorting" (click)="sortCollection('board')">{{resourceService.frmelmnts.lbl.board}} &nbsp;&nbsp;
+							<i class="fa fa-sort" aria-hidden="true" *ngIf="direction == '' || sortColumn != 'board' "></i>
+							<span  *ngIf="sortColumn == 'board'" class="d-inline-block">
+								<i class="fa fa-sort-asc" aria-hidden="true" [ngClass]="{'sb-color-gray-100':direction == 'asc'}"></i>
+								<i class="fa fa-sort-desc" aria-hidden="true" [ngClass]="{'sb-color-gray-100':direction == 'desc'}"></i>
+							</span>
+						</th>
 						<th class="cursor-pointer sb-sorting" (click)="sortCollection('medium')">{{resourceService.frmelmnts.lbl.medium}} &nbsp;&nbsp;
 							<i class="fa fa-sort" aria-hidden="true" *ngIf="direction == '' || sortColumn != 'medium' "></i>
 							<span  *ngIf="sortColumn == 'medium'" class="d-inline-block">
@@ -73,7 +80,13 @@
 						</th>
 						<th *ngIf="!programDetails?.target_type || programDetails?.target_type === 'collections'">{{firstLevelFolderLabel}}</th>
 						<th *ngIf="programDetails?.target_type && programDetails?.target_type === 'searchCriteria'">{{ resourceService.frmelmnts.lbl.creator }}</th>
-						<th>{{resourceService.frmelmnts.lbl.status}}</th>
+						<th class="cursor-pointer sb-sorting" (click)="sortCollection('resourceStatusText')">{{resourceService.frmelmnts.lbl.status}} &nbsp;&nbsp;
+							<i class="fa fa-sort" aria-hidden="true" *ngIf="direction == '' || sortColumn != 'resourceStatusText' "></i>
+							<span  *ngIf="sortColumn == 'resourceStatusText'" class="d-inline-block">
+								<i class="fa fa-sort-asc" aria-hidden="true" [ngClass]="{'sb-color-gray-100':direction == 'asc'}"></i>
+								<i class="fa fa-sort-desc" aria-hidden="true" [ngClass]="{'sb-color-gray-100':direction == 'desc'}"></i>
+							</span>
+						</th>
 						<th>&nbsp;</th>
 					</tr>
 				</thead>
@@ -83,6 +96,11 @@
 							<td>
 								<div class="sb__ellipsis sb__ellipsis--three sb-color-primary font-weight-bold">
 									{{data.name}}
+								</div>
+							</td>
+							<td>
+								<div>
+									{{data.board}}
 								</div>
 							</td>
 							<td>
@@ -145,7 +163,7 @@
 							<label class="d-block fs-0-785 font-weight-normal">{{resourceService.frmelmnts.lbl.medium}}</label>
 							<sui-multi-select class="selection p-5 b-100"
 							formControlName="medium" #mediums
-							[options]="programDetails.config.medium"
+							[options]="prefernceFormOptions['medium']"
 							[(ngModel)]="setPreferences['medium']"
 								appTelemetryInteract
 								[telemetryInteractEdata]="programTelemetryService.getTelemetryInteractEdata('medium', configService.telemetryLabels.eventType.select, configService.telemetryLabels.eventSubtype.multiSelect,telemetryPageId, {key:'dialog_id',value:'filter_collections'})"
@@ -166,7 +184,7 @@
 							<label class="d-block fs-0-785 font-weight-normal">{{resourceService.frmelmnts.lbl.subject}}</label>
 							<sui-multi-select class="selection p-5 b-100"
 							formControlName="subject" #subjects
-							[options]="programDetails.config.subject"
+							[options]="prefernceFormOptions['subject']"
 							[(ngModel)]="setPreferences['subject']"
 							appTelemetryInteract
 								[telemetryInteractEdata]="programTelemetryService.getTelemetryInteractEdata('subject', configService.telemetryLabels.eventType.select, configService.telemetryLabels.eventSubtype.multiSelect,telemetryPageId, {key:'dialog_id',value:'filter_collections'})"
@@ -187,7 +205,7 @@
 							<label class="d-block fs-0-785 font-weight-normal">{{resourceService.frmelmnts.lbl.class}}</label>
 							<sui-multi-select formControlName="gradeLevel"
 							class="selection p-5 b-100" #gradeLevels
-							[options]="programDetails.config.gradeLevel"
+							[options]="prefernceFormOptions['gradeLevel']"
 							[(ngModel)]="setPreferences['gradeLevel']"
 							appTelemetryInteract
 								[telemetryInteractEdata]="programTelemetryService.getTelemetryInteractEdata('class', configService.telemetryLabels.eventType.select, configService.telemetryLabels.eventSubtype.multiSelect,telemetryPageId, {key:'dialog_id',value:'filter_collections'})"

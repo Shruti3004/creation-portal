@@ -14,6 +14,7 @@ import { HelperService } from '../../services/helper.service';
 export class RecursiveTreeComponent implements OnInit {
 
   @Input() collectionUnits;
+  @Input() reusedContributions;
   @Input() selectedChapter;
   @Input() programContext;
   @Input() sessionContext;
@@ -170,11 +171,12 @@ export class RecursiveTreeComponent implements OnInit {
     this.router.navigateByUrl(`/contribute/program/${this.sessionContext.programId}/textbook/${this.sessionContext.collection}/${identifier}`);
   }
 
-  getSerialNumber(collection, currentIndex) {
+  getIndex(collection, currentIndex) {
     let serialNumber = 1;
     for (let i = 0; i < currentIndex; i++) {
       const content = collection.leaf[i];
-      if (content.contentVisibility === true) {
+      // tslint:disable-next-line:max-line-length
+      if (content.contentVisibility === true && this.includes(this.sourcingOrgReviewer, this.selectedStatus, content.sourcingStatus || content.status)) {
         serialNumber++;
       }
     }

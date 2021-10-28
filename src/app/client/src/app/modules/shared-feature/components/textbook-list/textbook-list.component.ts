@@ -1,6 +1,6 @@
 import { ResourceService, ToasterService, ConfigService  } from '@sunbird/shared';
 import { Component, OnInit, Input, Output, EventEmitter, ViewChild } from '@angular/core';
-import { ProgramsService, ActionService, UserService } from '@sunbird/core';
+import { ProgramsService, ActionService, UserService, ContentHelperService} from '@sunbird/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { CollectionHierarchyService } from '../../../sourcing/services/collection-hierarchy/collection-hierarchy.service';
 import { HttpClient } from '@angular/common/http';
@@ -20,6 +20,7 @@ export class TextbookListComponent implements OnInit {
   @Input() programDetails: any = {};
   @Input() contentAggregationInput: Array<any> = [];
   @Input() userPreferences: any = {};
+  @Input() frameworkCategories: any = {};
   @Input() telemetryPageId;
   public programId: string;
   public config: any;
@@ -45,10 +46,6 @@ export class TextbookListComponent implements OnInit {
   sbFormBuilder: FormBuilder;
   showTextbookFiltersModal = false;
   setPreferences = {};
-  /*mediums:any[];
-  classes:any[];
-  subjects:any[];
-  buttonLabel = this.resourceService.frmelmnts.lbl.addFilters;*/
   textbookFiltersApplied = false;
   public telemetryInteractCdata: any;
   public telemetryInteractPdata: any;
@@ -56,13 +53,13 @@ export class TextbookListComponent implements OnInit {
   public targetCollection: string;
   public targetCollections: string;
   public firstLevelFolderLabel: string;
-
+  public prefernceFormOptions = {};
   constructor(public activatedRoute: ActivatedRoute, private router: Router,
     public programsService: ProgramsService, private httpClient: HttpClient,
     public toasterService: ToasterService, public resourceService: ResourceService,
     public actionService: ActionService, private collectionHierarchyService: CollectionHierarchyService,
     private userService: UserService, private formBuilder: FormBuilder, public configService: ConfigService,
-    public programTelemetryService: ProgramTelemetryService, public helperService: HelperService
+    public programTelemetryService: ProgramTelemetryService, public helperService: HelperService, public contentHelperService: ContentHelperService
   )  {
     this.sbFormBuilder = formBuilder;
   }
@@ -99,9 +96,17 @@ export class TextbookListComponent implements OnInit {
         this.setPreferences['gradeLevel'] = (this.userPreferences.sourcing_preference.gradeLevel) ? this.userPreferences.sourcing_preference.gradeLevel : [];
       }
     }
-    /*this.mediums =  _.compact(this.programDetails.config.medium);
-    this.classes = _.compact(this.programDetails.config.gradeLevel);
-    this.subjects = _.compact(this.programDetails.config.subject);*/
+    
+    this.prefernceFormOptions['medium'] = this.programDetails.config.medium;
+    this.prefernceFormOptions['gradeLevel'] = this.programDetails.config.gradeLevel;
+    this.prefernceFormOptions['subject'] = this.programDetails.config.subject;
+    if (this.programDetails.target_type === 'searchCriteria'  && !_.isEmpty(this.frameworkCategories)) {
+      this.frameworkCategories.forEach((element) => {
+        if (_.includes(['medium', 'subject', 'gradeLevel'], element.code)) {
+          this.prefernceFormOptions[element['code']] = _.map(element.terms, 'name');
+        }
+      });
+    }
     this.prefernceForm = this.sbFormBuilder.group({
       medium: [],
       subject: [],
@@ -177,7 +182,7 @@ export class TextbookListComponent implements OnInit {
       this.showLoader = false;
     }
   }
-
+ 
   viewContribution(collection) {
     this.selectedCollection.emit(collection);
   }
@@ -193,26 +198,44 @@ export class TextbookListComponent implements OnInit {
         }
       }
     };
+    if (_.get(this.programDetails, 'target_type') && this.programDetails.target_type === 'searchCriteria') {
+      req.data.request.filters['targetType'] = 'searchCriteria';
+    }
     return this.programsService.post(req).subscribe((res) => {
       if (res.result && res.result.tableData && res.result.tableData.length) {
         try {
-        const headers = [
-          this.resourceService.frmelmnts.lbl.projectName,
-          // tslint:disable-next-line:max-line-length
-          this.programDetails.target_collection_category ? this.resourceService.frmelmnts.lbl.textbookName.replace('{TARGET_NAME}', this.programDetails.target_collection_category[0]) : 'Textbook Name',
-          this.resourceService.frmelmnts.lbl.profile.Medium,
-          this.resourceService.frmelmnts.lbl.profile.Classes,
-          this.resourceService.frmelmnts.lbl.profile.Subjects,
-          this.firstLevelFolderLabel ? this.firstLevelFolderLabel : this.resourceService.frmelmnts.lbl.deafultFirstLevelFolders,
-          this.resourceService.frmelmnts.lbl.nominationReceived,
-          this.resourceService.frmelmnts.lbl.samplesRecieved,
-          this.resourceService.frmelmnts.lbl.nominationAccepted,
-          this.resourceService.frmelmnts.lbl.contributionReceived,
-          this.resourceService.frmelmnts.lbl.contributionApproved,
-          this.resourceService.frmelmnts.lbl.contributionRejected,
-          this.resourceService.frmelmnts.lbl.contributionPending,
-          this.resourceService.frmelmnts.lbl.contributioncorrectionsPending
-        ];
+        let headers;
+        if (!this.programDetails.target_type || this.programDetails.target_type === 'collections') {
+          headers = [
+            this.resourceService.frmelmnts.lbl.projectName,
+            // tslint:disable-next-line:max-line-length
+            this.programDetails.target_collection_category ? this.resourceService.frmelmnts.lbl.textbookName.replace('{TARGET_NAME}', this.programDetails.target_collection_category[0]) : 'Textbook Name',
+            this.resourceService.frmelmnts.lbl.profile.Medium,
+            this.resourceService.frmelmnts.lbl.profile.Classes,
+            this.resourceService.frmelmnts.lbl.profile.Subjects,
+            this.firstLevelFolderLabel ? this.firstLevelFolderLabel : this.resourceService.frmelmnts.lbl.deafultFirstLevelFolders,
+            this.resourceService.frmelmnts.lbl.nominationReceived,
+            this.resourceService.frmelmnts.lbl.samplesRecieved,
+            this.resourceService.frmelmnts.lbl.nominationAccepted,
+            this.resourceService.frmelmnts.lbl.contributionReceived,
+            this.resourceService.frmelmnts.lbl.contributionApproved,
+            this.resourceService.frmelmnts.lbl.contributionRejected,
+            this.resourceService.frmelmnts.lbl.contributionPending,
+            this.resourceService.frmelmnts.lbl.contributioncorrectionsPending
+          ];
+        } else {
+          headers = [
+            this.resourceService.frmelmnts.lbl.projectName,
+            this.resourceService.frmelmnts.lbl.contentname,
+            this.resourceService.frmelmnts.lbl.framework,
+            this.resourceService.frmelmnts.lbl.board,
+            this.resourceService.frmelmnts.lbl.medium,
+            this.resourceService.frmelmnts.lbl.Class,
+            this.resourceService.frmelmnts.lbl.subject,
+            this.resourceService.frmelmnts.lbl.creator,
+            this.resourceService.frmelmnts.lbl.status,
+          ];
+        }
         const resObj = _.get(_.find(res.result.tableData, {program_id: this.programId}), 'values');
         const tableData = [];
         if (_.isArray(resObj) && resObj.length) {
@@ -241,38 +264,14 @@ export class TextbookListComponent implements OnInit {
   getContentsVisibilityStatusText () {
     this.collectionsCnt = 0;
     _.map(this.collectionsInput, (content) => {
-      content['contentVisibility'] = this.shouldContentBeVisible(content);
-      content['sourcingStatus'] = this.checkSourcingStatus(content);
-      const temp = this.helperService.getContentDisplayStatus(content)
+      content['contentVisibility'] = this.contentHelperService.shouldContentBeVisible(content, this.programDetails);
+      content['sourcingStatus'] = this.contentHelperService.checkSourcingStatus(content, this.programDetails);
+      const temp = this.contentHelperService.getContentDisplayStatus(content)
       content['resourceStatusText'] = temp[0];
       content['resourceStatusClass'] = temp[1];
       if (content.contentVisibility) {
         this.collectionsCnt++;
       }
     });
-  }
-
-  checkSourcingStatus(content) {
-    if (this.programDetails.config.acceptedContents  &&
-         _.includes(this.programDetails.config.acceptedContents || [], content.identifier)) {
-            return 'Approved';
-      } else if (this.programDetails.config.rejectedContents  &&
-              _.includes(this.programDetails.config.rejectedContents || [], content.identifier)) {
-            return 'Rejected';
-      } else if (content.status === 'Draft' && content.prevStatus === 'Live') {
-            return 'PendingForCorrections';
-      } else {
-        return null;
-      }
-  }
-  isSourcingOrgReviewer () {
-    return this.userService.isSourcingOrgReviewer(this.programDetails);
-  }
-
-  shouldContentBeVisible(content) {
-    if (this.isSourcingOrgReviewer() && this.sourcingOrgReviewer && (content.status === 'Live'|| (content.prevStatus === 'Live' && content.status === 'Draft' ))) {
-      return true;
-    }
-    return false;
   }
 }

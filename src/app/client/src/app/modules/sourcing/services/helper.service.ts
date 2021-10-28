@@ -274,8 +274,8 @@ export class HelperService {
   }
 
   checkIfContentPublishedOrRejected(data, action, contentId) {
-    if ((action === 'accept' && _.includes(data.acceptedContents, contentId))
-      || (action === 'reject' && _.includes(data.rejectedContents, contentId))) {
+    if ((action === 'accept' && _.includes(data.acceptedcontents, contentId))
+      || (action === 'reject' && _.includes(data.rejectedcontents, contentId))) {
       action === 'accept' ? this.toasterService.error(this.resourceService.messages.fmsg.m00104) :
         this.toasterService.error(this.resourceService.messages.fmsg.m00105);
       this.programStageService.removeLastStage();
@@ -848,7 +848,46 @@ export class HelperService {
         return nomContentTypes;
       }
   }
+  getSharedProperties(programDetails, collection?) {
+    const selectedSharedContext = programDetails.config.sharedContext.reduce((obj, context) => {
+      return {...obj, [context]: this.getSharedContextObjectProperty(programDetails, context, collection)};
+    }, {});
+    return selectedSharedContext;
+  }
+  getSharedContextObjectProperty(programDetails, property, collection?) {
+    let ret;
+    switch (property) {
+      case 'channel':
+        ret =  _.get(programDetails, 'rootorg_id');
+        break;
+      case 'topic':
+        ret = null;
+        break;
+      default:
+        ret =  _.get(programDetails, `config.${property}`);
+        break;
+    }
+    if (collection) {
+      ret = collection[property] || ret;
+    }
+    if (_.includes(['gradeLevel', 'medium', 'subject'], property)) {
+      ret = _.isArray(ret) ? ret : _.split(ret, ',');
+    }
+    return ret || null;
 
+    /*if (property === 'channel') {
+       return _.get(this.programDetails, 'rootorg_id');
+    } else if ( property === 'topic' ) {
+      return null;
+    } else {
+      const collectionComComponent = _.find(this.programDetails.config.components, { 'id': 'ng.sunbird.collection' });
+      const filters =  collectionComComponent.config.filters;
+      const explicitProperty =  _.find(filters.explicit, {'code': property});
+      const implicitProperty =  _.find(filters.implicit, {'code': property});
+      return (implicitProperty) ? implicitProperty.range || implicitProperty.defaultValue :
+       explicitProperty.range || explicitProperty.defaultValue;
+    }*/
+  }
   fetchRootMetaData(sharedContext, selectedSharedContext, programTargetType?) {
     return sharedContext.reduce((obj, context) => {
               return { ...obj, ...(this.getContextObj(context, selectedSharedContext, programTargetType)) };
@@ -942,20 +981,19 @@ export class HelperService {
   }
   attachContentToProgram(action, contentId, programContext, rejectedComments?) {
     let request = {
-      program_id: programContext.program_id,
-      config: _.get(programContext, 'config')
+      program_id: programContext.program_id
     };
       // tslint:disable-next-line:max-line-length
     if (action === 'accept' || action === 'acceptWithChanges') {
-      request.config['acceptedContents'] = _.uniq([...request.config.acceptedContents || [], contentId]);
+      request['acceptedcontents'] = _.uniq([...programContext.acceptedcontents || [], contentId]);
     } else {
-      request.config['rejectedContents'] = _.uniq([...request.config.rejectedContents || [], contentId]);
+      request['rejectedcontents'] = _.uniq([...programContext.rejectedcontents || [], contentId]);
     }
 
     if (action === 'reject' && rejectedComments) {
       // tslint:disable-next-line:max-line-length
-      request.config['sourcingRejectedComments'] = request.config.sourcingRejectedComments && _.isString(request.config.sourcingRejectedComments) ? JSON.parse(request.config.sourcingRejectedComments) : request.config.sourcingRejectedComments || {};
-      request.config['sourcingRejectedComments'][contentId] = rejectedComments;
+      request['sourcingrejectedcomments'] = programContext.sourcingrejectedcomments && _.isString(programContext.sourcingrejectedcomments) ? JSON.parse(programContext.sourcingrejectedcomments) : programContext.sourcingrejectedcomments || {};
+      request['sourcingrejectedcomments'][contentId] = rejectedComments;
     }
 
     this.programsService.updateProgram(request).subscribe(() => {
@@ -966,18 +1004,23 @@ export class HelperService {
         }
         this.sendNotification.next(_.capitalize(action));
         this.programStageService.removeLastStage();
+        this.programsService.emitHeaderEvent(true);
     }, (err) => {
       this.acceptContent_errMsg(action);
     });
   }
 
   publishContentOnOrigin(action, contentId, contentMetaData, programContext) {
-    // const channel =  _.get(this._selectedCollectionMetaData.originData, 'channel');
-    // if (_.isString(channel)) {
-    //   contentMetaData['createdFor'] = [channel];
-    // } else if (_.isArray(channel)) {
-    //   contentMetaData['createdFor'] = channel;
-    // }
+    if (programContext.target_type === 'searchCriteria') {
+      contentMetaData['createdFor'] = [programContext.rootorg_id];
+    } else {
+      const channel =  _.get(this._selectedCollectionMetaData, 'originData.channel');
+      if (_.isString(channel)) {
+        contentMetaData['createdFor'] = [channel];
+      } else if (_.isArray(channel)) {
+        contentMetaData['createdFor'] = channel;
+      }
+    }
 
     // @Todo remove after testing
     // this.sendNotification.next(_.capitalize(action));
@@ -1024,14 +1067,15 @@ export class HelperService {
   }
   checkIfContentisWithProgram(contentId, programContext) {
     let msg;
-    if (_.includes(programContext.config.acceptedContents, contentId)) {
+    if (_.includes(programContext.acceptedContents, contentId)) {
       msg = this.resourceService.messages.emsg.contentAcceptedForProgram;
-    } else if (_.includes(programContext.config.rejectedContents, contentId)) {
+    } else if (_.includes(programContext.rejectedContents, contentId)) {
       msg = this.resourceService.messages.emsg.contentRejectedForProgram;
     }
    if (msg) {
       this.toasterService.error(msg)
       this.programStageService.removeLastStage();
+      this.programsService.emitHeaderEvent(true);
       return true;
     } else {
       return false;
@@ -1128,6 +1172,26 @@ export class HelperService {
     return {...organisationFrameworkUserInput, ...targetFrameworkUserInput, ...{targetFWIds}};
   }
 
+  getFormattedFrameworkMetaWithOutCollection(row, sessionContext) {
+    const organisationFrameworkUserInput = _.pick(row, _.map(this.frameworkService.orgFrameworkCategories, 'orgIdFieldName'));
+    const framework = _.first(_.get(sessionContext, 'framework'));
+    this.flattenedFrameworkCategories[framework] = {};
+    // tslint:disable-next-line:max-line-length
+    const orgFrameworkCategories = _.get(this.frameworkService.frameworkData[framework], 'categories');
+    _.forEach(orgFrameworkCategories, item => {
+      const terms = _.get(item, 'terms');
+      this.flattenedFrameworkCategories[framework][item.code] = terms || [];
+    });
+    _.forEach(organisationFrameworkUserInput, (value, key) => {
+      const code = _.get(_.find(this.frameworkService.orgFrameworkCategories, {
+        'orgIdFieldName': key
+      }), 'code');
+      organisationFrameworkUserInput[key] = this.hasEmptyElement(value) ? _.get(sessionContext.frameworkData, key) || [] :
+      this.convertNameToIdentifier(framework, value, key, code, sessionContext.frameworkData, 'identifier');
+    });
+    return {...organisationFrameworkUserInput};
+  }
+
 /**
  *
  *
@@ -1170,8 +1234,9 @@ export class HelperService {
     const masterCategoryIds = [...orgFrameworkFieldIds, ...targetFrameworkFieldIds];
     const masterCategoryCodes = [...orgFrameworkFieldCodes, ...targetFrameworkFieldCodes];
     const framework = this.frameworkService.frameworkData[targetCollectionFrameworksData.framework];
+    // tslint:disable-next-line:max-line-length
+    const targetFramework = targetCollectionFrameworksData.targetFWIds && this.frameworkService.frameworkData[_.first(targetCollectionFrameworksData.targetFWIds)];
 
-    const targetFramework = this.frameworkService.frameworkData[_.first(targetCollectionFrameworksData.targetFWIds)];
 
     _.forEach(formFieldProperties, field => {
           if (_.has(targetCollectionFrameworksData, 'framework') && !_.has(field, 'sourceCategory')
@@ -1187,7 +1252,7 @@ export class HelperService {
               invalidFormConfig = true;
               return false;
           } else if (_.has(targetCollectionFrameworksData, 'targetFWIds') && _.has(field, 'sourceCategory')
-            && _.includes(field.code, 'target') && _.includes(masterCategoryIds, field.code)
+            && _.includes(field.code, 'target') && _.includes(masterCategoryIds, field.code) && targetFramework
             && !_.includes(_.map(targetFramework.categories, 'code'), field.sourceCategory)) {
               console.error(field, 'is not in targetframework: ', targetCollectionFrameworksData.targetFWIds);
               invalidFormConfig = true;
@@ -1355,42 +1420,6 @@ export class HelperService {
     }
 
     return this.actionService.post(option);
-  }
-
-  getContentDisplayStatus(content) {
-    const resourceStatus = content.status;
-    const sourcingStatus = content.sourcingStatus;
-    const prevStatus = content.prevStatus;
-    let resourceStatusText,resourceStatusClass; 
-    if (resourceStatus === 'Review') {
-      resourceStatusText = this.resourceService.frmelmnts.lbl.reviewInProgress;
-      resourceStatusClass = 'sb-color-primary';
-    } else if (resourceStatus === 'Draft' && prevStatus === 'Review') {
-      resourceStatusText = this.resourceService.frmelmnts.lbl.notAccepted;
-      resourceStatusClass = 'sb-color-error';
-    } else if (resourceStatus === 'Draft' && prevStatus === 'Live') {
-      resourceStatusText = this.resourceService.frmelmnts.lbl.correctionsPending;
-      resourceStatusClass = 'sb-color-primary';
-    } else if (resourceStatus === 'Live' && _.isEmpty(sourcingStatus)) {
-      resourceStatusText = this.resourceService.frmelmnts.lbl.approvalPending;
-      resourceStatusClass = 'sb-color-warning';
-    } else if ( sourcingStatus=== 'Rejected') {
-      resourceStatusText = this.resourceService.frmelmnts.lbl.rejected;
-      resourceStatusClass = 'sb-color-error';
-    } else if (sourcingStatus === 'Approved') {
-      resourceStatusText = this.resourceService.frmelmnts.lbl.approved;
-      resourceStatusClass = 'sb-color-success';
-    } else if (resourceStatus === 'Failed') {
-      resourceStatusText = this.resourceService.frmelmnts.lbl.failed;
-      resourceStatusClass = 'sb-color-error';
-    } else if (resourceStatus === 'Processing') {
-      resourceStatusText = this.resourceService.frmelmnts.lbl.processing;
-      resourceStatusClass = '';
-    } else {
-      resourceStatusText = resourceStatus;
-      resourceStatusClass = 'sb-color-gray-400';
-    }
-    return [resourceStatusText, resourceStatusClass];
   }
 
   canSourcingReviewerPerformActions(contentMetaData, sourcingReviewStatus, programContext, originCollectionData, selectedOriginUnitStatus) {

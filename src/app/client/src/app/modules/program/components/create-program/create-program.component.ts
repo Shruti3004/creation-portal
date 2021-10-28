@@ -2,7 +2,7 @@ import { ConfigService, ResourceService, ToasterService, ServerResponse, Navigat
 import { FineUploader } from 'fine-uploader';
 import { ProgramsService, DataService, FrameworkService, ActionService, UserService} from '@sunbird/core';
 import { Subscription, Subject, throwError, Observable, of } from 'rxjs';
-import { map, catchError } from 'rxjs/operators';
+import { tap, first, map, takeUntil, catchError, count, isEmpty } from 'rxjs/operators';
 import { Component, OnInit, AfterViewInit, ViewChild, ElementRef, OnChanges, Input, Output, EventEmitter } from '@angular/core';
 import * as _ from 'lodash-es';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -172,6 +172,10 @@ export class CreateProgramComponent implements OnInit, AfterViewInit {
       } else {
         this.initializeProjectTargetTypeForm();
         this.openProjectTargetTypeModal = true;
+      }
+
+      if (!_.isEmpty(_.get(this.programDetails, 'config.contributors'))) {
+        this.setPreSelectedContributors(_.get(this.programDetails, 'config.contributors'));
       }
     }, error => {
       const errInfo = {
@@ -1005,7 +1009,7 @@ export class CreateProgramComponent implements OnInit, AfterViewInit {
       //delete prgData.program_end_date;
       delete prgData.targetPrimaryCategories;
 
-      if (prgData.type !== 'public') {
+      if (prgData.type && prgData.type !== 'public') {
         delete prgData.nomination_enddate;
         delete prgData.shortlisting_enddate;
       }
@@ -1026,7 +1030,7 @@ export class CreateProgramComponent implements OnInit, AfterViewInit {
         prgData['content_submission_enddate'].setHours(23,59,59);
       }
 
-      if (prgData.type === 'restricted') {
+      if (this.programDetails.type === 'restricted') {
         prgData['config'] = _.get(this.programDetails, 'config');
         prgData.config['contributors'] = this.selectedContributors;
       }
@@ -1208,7 +1212,8 @@ showTexbooklist(showTextBookSelector = true) {
       this.programConfig['frameworkObj'] = {
         identifier : this.programScope.framework.identifier,
         code: this.programScope.framework.code,
-        type: this.programScope.framework.type
+        type: this.programScope.framework.type,
+        name : this.programScope.framework.name,
       };
     }
   }
@@ -1383,25 +1388,25 @@ showTexbooklist(showTextBookSelector = true) {
   }
 
   initEditBlueprintForm(collection) {
-   [this.initTopicOptions, this.initLearningOutcomeOptions] = this.programsService.initializeBlueprintMetadata(this.choosedTextBook, this.programScope.framework.categories);
-   let blueprint = {};
-    this.blueprintTemplate.properties.forEach( (property) => {
-      if(!property.default) {
-        if(property.code === 'topics') property.options = this.initTopicOptions;
-        else if(property.code === 'learningOutcomes') property.options = this.initLearningOutcomeOptions;
-        blueprint[property.code] = [];
-      }
-      if(property.children) {
-        blueprint[property.code] = {};
-        property.children.forEach((nestedProperty) => {
-          blueprint[property.code][nestedProperty.code] = property.default;
-        })
-      }
-    })
-    if(this.localBlueprintMap[this.choosedTextBook && this.choosedTextBook.code]) {
-      this.localBlueprint = this.localBlueprintMap[this.choosedTextBook.code]
-    }
-    else this.localBlueprint = blueprint;
+    [this.initTopicOptions, this.initLearningOutcomeOptions] = this.programsService.initializeBlueprintMetadata(this.choosedTextBook, this.programScope.framework.categories);
+    let blueprint = {};
+     this.blueprintTemplate.properties.forEach( (property) => {
+       if(!property.default) {
+         if(property.code === 'topics') property.options = this.initTopicOptions;
+         else if(property.code === 'learningOutcomes') property.options = this.initLearningOutcomeOptions;
+         blueprint[property.code] = [];
+       }
+       if(property.children) {
+         blueprint[property.code] = {};
+         property.children.forEach((nestedProperty) => {
+           blueprint[property.code][nestedProperty.code] = property.default;
+         })
+       }
+     })
+     if(this.localBlueprintMap[this.choosedTextBook && this.choosedTextBook.code]) {
+       this.localBlueprint = this.localBlueprintMap[this.choosedTextBook.code]
+     }
+     else this.localBlueprint = blueprint;
 
   }
 
@@ -1774,6 +1779,7 @@ showTexbooklist(showTextBookSelector = true) {
       this.selectedContributors.Org = _.get(contributors, 'Org');
       this.preSelectedContributors.Org = _.map(_.get(contributors, 'Org'), org => {
         return {
+          ...org,
           osid: org.osid,
           isDisabled: !_.isEmpty(_.find(disabledContribOrg, { osid: org.osid }))
         }
@@ -1784,6 +1790,7 @@ showTexbooklist(showTextBookSelector = true) {
       this.selectedContributors.User = _.get(contributors, 'User');
       this.preSelectedContributors.User = _.map(_.get(contributors, 'User'), user => {
         return {
+          ...user,
           osid: user.osid,
           isDisabled: !_.isEmpty(_.find(disabledContribUser, { osid: user.osid }))
         }

@@ -113,6 +113,8 @@ export class ContentEditorComponent implements OnInit, OnDestroy, AfterViewInit 
   ngOnInit() {
     this.userProfile = this.userService.userProfile;
     this.sessionContext = this.contentEditorComponentInput.sessionContext;
+    // tslint:disable-next-line:max-line-length
+    this.sessionContext.framework = _.isArray(this.sessionContext.framework) ? _.first(this.sessionContext.framework) : this.sessionContext.framework;
     this.unitIdentifier  = _.get(this.contentEditorComponentInput, 'unitIdentifier');
     this.programContext = _.get(this.contentEditorComponentInput, 'programContext');
     this.originCollectionData = _.get(this.contentEditorComponentInput, 'originCollectionData');
@@ -341,7 +343,7 @@ export class ContentEditorComponent implements OnInit, OnDestroy, AfterViewInit 
       objectType: this.contentData.objectType
     };
 
-    this.helperService.getCollectionOrContentCategoryDefinition(targetCollectionMeta, assetMeta);
+    this.helperService.getCollectionOrContentCategoryDefinition(targetCollectionMeta, assetMeta, this.programContext.target_type);
   }
 
   handleContentStatusText() {
@@ -550,14 +552,19 @@ export class ContentEditorComponent implements OnInit, OnDestroy, AfterViewInit 
     }
     this.showPreview = true;
     // tslint:disable-next-line:max-line-length
-    this.collectionHierarchyService.addResourceToHierarchy(this.sessionContext.collection,
-       this.contentEditorComponentInput.unitIdentifier, this.contentEditorComponentInput.contentId)
-    .subscribe((res) => {
+    if (this.sessionContext.collection && this.contentEditorComponentInput.unitIdentifier) {
+      this.collectionHierarchyService.addResourceToHierarchy(this.sessionContext.collection,
+        this.contentEditorComponentInput.unitIdentifier, this.contentEditorComponentInput.contentId)
+     .subscribe((res) => {
+       this.getContentMetadata();
+     }, (err) => {
+       this.toasterService.error(this.resourceService.messages.fmsg.m0098);
+       this.getDetails();
+     });
+    } else {
+      this.showLoader = false;
       this.getContentMetadata();
-    }, (err) => {
-      this.toasterService.error(this.resourceService.messages.fmsg.m0098);
-      this.getDetails();
-    });
+    }
   }
 
   saveMetadataForm(cb?) {
@@ -573,9 +580,21 @@ export class ContentEditorComponent implements OnInit, OnDestroy, AfterViewInit 
       };
 
       this.helperService.contentMetadataUpdate(this.contentEditRole, request, this.contentData.identifier).subscribe((res) => {
-        // tslint:disable-next-line:max-line-length
-        this.collectionHierarchyService.addResourceToHierarchy(this.sessionContext.collection, this.unitIdentifier, res.result.node_id || res.result.identifier)
-        .subscribe((data) => {
+        if (this.sessionContext.collection && this.unitIdentifier) {
+          // tslint:disable-next-line:max-line-length
+          this.collectionHierarchyService.addResourceToHierarchy(this.sessionContext.collection, this.unitIdentifier, res.result.node_id || res.result.identifier)
+          .subscribe((data) => {
+            this.showEditMetaForm = false;
+            if (cb) {
+              cb.call(this);
+            } else {
+              this.getContentMetadata();
+              this.toasterService.success(this.resourceService.messages.smsg.m0060);
+            }
+          }, (err) => {
+            this.toasterService.error(this.resourceService.messages.fmsg.m0098);
+          });
+        } else {
           this.showEditMetaForm = false;
           if (cb) {
             cb.call(this);
@@ -583,9 +602,7 @@ export class ContentEditorComponent implements OnInit, OnDestroy, AfterViewInit 
             this.getContentMetadata();
             this.toasterService.success(this.resourceService.messages.smsg.m0060);
           }
-        }, (err) => {
-          this.toasterService.error(this.resourceService.messages.fmsg.m0098);
-        });
+        }
       }, err => {
         this.toasterService.error(this.resourceService.messages.fmsg.m0098);
       });
@@ -624,6 +641,13 @@ export class ContentEditorComponent implements OnInit, OnDestroy, AfterViewInit 
           }, (err) => {
             this.toasterService.error(this.resourceService.messages.fmsg.m0099);
           });
+        } else {
+          this.toasterService.success(this.resourceService.messages.smsg.m0061);
+          this.programStageService.removeLastStage();
+          this.programsService.emitHeaderEvent(true);
+          this.uploadedContentMeta.emit({
+            contentId: res.result.content_id
+          });
         }
        }, (err) => {
         this.toasterService.error(this.resourceService.messages.fmsg.m0099);
@@ -643,6 +667,10 @@ export class ContentEditorComponent implements OnInit, OnDestroy, AfterViewInit 
             this.programStageService.removeLastStage();
             this.programsService.emitHeaderEvent(true);
           });
+        } else {
+          this.toasterService.success(this.resourceService.messages.smsg.m0062);
+          this.programStageService.removeLastStage();
+          this.programsService.emitHeaderEvent(true);
         }
       }, (err) => {
         this.toasterService.error(this.resourceService.messages.fmsg.m00100);
@@ -661,6 +689,10 @@ export class ContentEditorComponent implements OnInit, OnDestroy, AfterViewInit 
             this.programStageService.removeLastStage();
             this.programsService.emitHeaderEvent(true);
           });
+        } else {
+          this.toasterService.success(this.resourceService.messages.smsg.m0063);
+          this.programStageService.removeLastStage();
+          this.programsService.emitHeaderEvent(true);
         }
       }, (err) => {
         this.toasterService.error(this.resourceService.messages.fmsg.m00101);
@@ -673,37 +705,12 @@ export class ContentEditorComponent implements OnInit, OnDestroy, AfterViewInit 
   }
 
   attachContentToTextbook (action) {
-    const hierarchyObj  = _.get(this.sessionContext.hierarchyObj, 'hierarchy');
-    if (hierarchyObj) {
-      const rootOriginInfo = _.get(_.get(hierarchyObj, this.sessionContext.collection), 'originData');
-      let channel =  rootOriginInfo && rootOriginInfo.channel;
-      if (_.isUndefined(channel)) {
-        const originInfo = _.get(_.get(hierarchyObj, this.unitIdentifier), 'originData');
-        channel = originInfo && originInfo.channel;
-      }
-      const originData = {
-        textbookOriginId: _.get(_.get(hierarchyObj, this.sessionContext.collection), 'origin'),
-        unitOriginId: _.get(_.get(hierarchyObj, this.unitIdentifier), 'origin'),
-        channel: channel
-      };
-      if (originData.textbookOriginId && originData.unitOriginId && originData.channel) {
-        if (action === 'accept') {
-          // tslint:disable-next-line:max-line-length
-          this.helperService.publishContentToDiksha(action, this.sessionContext.collection, this.contentData.identifier, originData, this.contentData);
-        } else if (action === 'reject' && this.FormControl.value.rejectComment.length) {
-          // tslint:disable-next-line:max-line-length
-          this.helperService.publishContentToDiksha(action, this.sessionContext.collection, this.contentData.identifier, originData, this.contentData, this.FormControl.value.rejectComment);
-        }
-      } else {
-        action === 'accept' ? this.toasterService.error(this.resourceService.messages.fmsg.m00102) :
-        this.toasterService.error(this.resourceService.messages.fmsg.m00100);
-        console.error('origin data missing');
-      }
-    } else {
-      action === 'accept' ? this.toasterService.error(this.resourceService.messages.emsg.approvingFailed) :
-      this.toasterService.error(this.resourceService.messages.fmsg.m00100);
-      console.error('origin data missing');
+    let rejectComment = '';
+    if (action === 'reject' && this.FormControl.value.rejectComment.length) {
+      rejectComment = this.FormControl.value.rejectComment;
     }
+    // tslint:disable-next-line:max-line-length
+    this.helperService.manageSourcingActions(action, this.sessionContext, this.programContext, this.unitIdentifier, this.contentData, rejectComment);
   }
 
   contentStatusNotify(status) {

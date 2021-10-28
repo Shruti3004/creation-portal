@@ -150,7 +150,7 @@
               </ng-container>
             </span>
             <ng-container *ngFor="let header of dynamicHeaders">
-              <span class="item-name">{{content[header.key] || '-'}}</span>
+              <span class="item-name" *ngIf="header.key">{{content[header.key] || '-'}}</span>
             </ng-container>
             <span class="item-status">{{content.creator}}</span>
             <span class="item-status" *ngIf="!content.sampleContent">

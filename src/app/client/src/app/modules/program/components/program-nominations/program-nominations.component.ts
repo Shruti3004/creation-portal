@@ -6,13 +6,12 @@ import { Component, OnInit, AfterViewInit, OnDestroy } from '@angular/core';
 import { ISessionContext, InitialState, IPagination} from '../../../sourcing/interfaces';
 import { CollectionHierarchyService } from '../../../sourcing/services/collection-hierarchy/collection-hierarchy.service';
 import * as _ from 'lodash-es';
-import { tap, first, catchError, takeUntil } from 'rxjs/operators';
-import { Subject } from 'rxjs';
+import { tap, first, catchError, takeUntil, take } from 'rxjs/operators';
+import { Subject, forkJoin, of } from 'rxjs';
 import * as moment from 'moment';
 import { ProgramStageService } from '../../services/program-stage/program-stage.service';
 import { ChapterListComponent } from '../../../sourcing/components/chapter-list/chapter-list.component';
 import { DatePipe } from '@angular/common';
-import { forkJoin, of } from 'rxjs';
 import {ProgramTelemetryService} from '../../services';
 import { SourcingService } from '../../../sourcing/services';
 import { HelperService } from '../../../sourcing/services/helper.service';
@@ -103,6 +102,7 @@ export class ProgramNominationsComponent implements OnInit, AfterViewInit, OnDes
   public targetCollection: string;
   public targetCollections: string;
   public firstLevelFolderLabel: string;
+  public showBulkApprovalButton: Boolean = false;
   constructor(public frameworkService: FrameworkService, private programsService: ProgramsService,
     private sourcingService: SourcingService,
     public resourceService: ResourceService, public config: ConfigService, private collectionHierarchyService: CollectionHierarchyService,
@@ -121,6 +121,10 @@ export class ProgramNominationsComponent implements OnInit, AfterViewInit, OnDes
     this.getProgramDetails();
     this.telemetryInteractCdata = [{id: this.userService.channel, type: 'sourcing_organization'}, {id: this.programId, type: 'project'}];
     this.telemetryInteractPdata = {id: this.userService.appId, pid: this.config.appConfig.TELEMETRY.PID};
+    this.sessionContext.telemetryPageDetails = {
+      telemetryInteractCdata: this.telemetryInteractCdata,
+      telemetryPageId: this.telemetryPageId
+    }
     this.telemetryInteractObject = {};
     this.roles = [{name: 'REVIEWER'}, {name: 'NONE'}];
     this.roleNames = _.map(this.roles, 'name');
@@ -175,7 +179,12 @@ export class ProgramNominationsComponent implements OnInit, AfterViewInit, OnDes
     return _.includes(this.userProfile.userRoles, 'ORG_ADMIN') &&
     this.router.url.includes('/sourcing');
   }
-
+  showBulkApproval() {
+    const isProgramForNoCollections = !!(this.programDetails.target_type && this.programDetails.target_type === 'searchCriteria')
+    const isSourcingSide = this.programsService.ifSourcingInstance();
+    const canAcceptContribution = this.helperService.canAcceptContribution(this.programDetails);;
+    return isSourcingSide && isProgramForNoCollections && canAcceptContribution;
+  }
   ngOnDestroy() {
     if (this.stageSubscription) {
       this.stageSubscription.unsubscribe();
@@ -247,18 +256,13 @@ export class ProgramNominationsComponent implements OnInit, AfterViewInit, OnDes
     if (tab === 'contributionDashboard' && !_.includes(this.visitedTab, 'contributionDashboard')) {
       this.showDashboardLoader =  true;
       if (_.isEmpty(this.programCollections)) {
-        if (!this.programDetails.target_type || this.programDetails.target_type === 'collections'){
-          this.getProgramCollection().subscribe(
-            (res) => { this.getNominationList(); },
-            (err) => { // TODO: navigate to program list page
-              this.showDashboardLoader =  false;
-              const errorMes = typeof _.get(err, 'error.params.errmsg') === 'string' && _.get(err, 'error.params.errmsg');
-              this.toasterService.warning(errorMes || 'Fetching textbooks failed');
-            });
-        } else {
-          this.programCollections = _.cloneDeep(this.contentAggregationData);
+        this.getProgramCollection().subscribe(
+        (res) => { this.getNominationList(); },
+        (err) => { // TODO: navigate to program list page
           this.showDashboardLoader =  false;
-        }
+          const errorMes = typeof _.get(err, 'error.params.errmsg') === 'string' && _.get(err, 'error.params.errmsg');
+          this.toasterService.warning(errorMes || 'Fetching textbooks failed');
+        });
       } else {
         this.getNominationList();
       }
@@ -439,16 +443,30 @@ export class ProgramNominationsComponent implements OnInit, AfterViewInit, OnDes
   }
 
   getProgramCollection (preferencefilters?) {
-    return this.collectionHierarchyService.getCollectionWithProgramId(this.programId, this.programDetails.target_collection_category, preferencefilters, false).pipe(
-      tap((response: any) => {
-        if (response && response.result) {
-          this.programCollections = response.result.content || [];
-        }
-      }),
-      catchError(err => {
-        return of(err);
-      })
-    );
+    if (!this.programDetails.target_type || this.programDetails.target_type === 'collections') {
+      return this.collectionHierarchyService.getCollectionWithProgramId(this.programId, this.programDetails.target_collection_category, preferencefilters).pipe(
+        tap((response: any) => {
+          if (response && response.result) {
+            this.programCollections = response.result.content || [];
+          }
+        }),
+        catchError(err => {
+          return of(err);
+        })
+      );
+    } else if (this.programDetails.target_type === 'searchCriteria') {
+      this.collectionHierarchyService.preferencefilters = preferencefilters;
+      return this.collectionHierarchyService.getnonCollectionProgramContents(this.programId).pipe(
+        tap((response: any) => {
+          if (response && response.result) {
+            this.programCollections = _.compact(_.concat(_.get(response.result, 'QuestionSet'), _.get(response.result, 'content')));
+          }
+        }),
+        catchError(err => {
+          return of(false);
+        })
+      );
+    } 
   }
 
   getcontentAggregationData() {
@@ -466,34 +484,48 @@ export class ProgramNominationsComponent implements OnInit, AfterViewInit, OnDes
 
   getDashboardData(approvedNominations) {
     // tslint:disable-next-line:max-line-length
-        if (!_.isEmpty(this.contentAggregationData) || (approvedNominations.length && !_.isEmpty(this.programCollections))) {
+        this.collectionHierarchyService.setProgram(this.programDetails);
+        if (!_.isEmpty(this.contentAggregationData) || approvedNominations.length) {
           const contents = _.cloneDeep(this.contentAggregationData);
+          let dashboardData;
           this.contributionDashboardData = _.map(approvedNominations, nomination => {
             if (nomination.organisation_id) {
+              if ((!this.programDetails.target_type || this.programDetails.target_type === 'collections') && !_.isEmpty(this.programCollections)) {
               // tslint:disable-next-line:max-line-length
-              const dashboardData = _.cloneDeep(this.collectionHierarchyService.getContentCounts(contents, nomination.organisation_id, this.programCollections));
-              // This is enable sorting table. So duping the data at the root of the dashboardData object
-              dashboardData['sourcingPending'] = dashboardData.sourcingOrgStatus && dashboardData.sourcingOrgStatus['pending'];
-              dashboardData['sourcingAccepted'] = dashboardData.sourcingOrgStatus && dashboardData.sourcingOrgStatus['accepted'];
-              dashboardData['sourcingRejected'] = dashboardData.sourcingOrgStatus && dashboardData.sourcingOrgStatus['rejected'];
-              dashboardData['contributorName'] = this.setContributorName(nomination, nomination.organisation_id ? true : false);
-              return {
-                ...dashboardData,
-                contributorDetails: nomination,
-                type: 'org'
-              };
+                dashboardData = _.cloneDeep(this.collectionHierarchyService.getContentCounts(contents, nomination.organisation_id, this.programCollections));
+              } else {
+                dashboardData = _.cloneDeep(this.collectionHierarchyService.getContentCounts(contents, nomination.organisation_id));
+              }
+              if (dashboardData) {
+                // This is enable sorting table. So duping the data at the root of the dashboardData object
+                dashboardData['sourcingPending'] = dashboardData.sourcingOrgStatus && dashboardData.sourcingOrgStatus['pending'];
+                dashboardData['sourcingAccepted'] = dashboardData.sourcingOrgStatus && dashboardData.sourcingOrgStatus['accepted'];
+                dashboardData['sourcingRejected'] = dashboardData.sourcingOrgStatus && dashboardData.sourcingOrgStatus['rejected'];
+                dashboardData['contributorName'] = this.setContributorName(nomination, nomination.organisation_id ? true : false);
+                return {
+                  ...dashboardData,
+                  contributorDetails: nomination,
+                  type: 'org'
+                };
+              }
             } else {
               // tslint:disable-next-line:max-line-length
-              const dashboardData = _.cloneDeep(this.collectionHierarchyService.getContentCountsForIndividual(contents, nomination.user_id, this.programCollections));
-              dashboardData['sourcingPending'] = dashboardData.sourcingOrgStatus && dashboardData.sourcingOrgStatus['pending'];
-              dashboardData['sourcingAccepted'] = dashboardData.sourcingOrgStatus && dashboardData.sourcingOrgStatus['accepted'];
-              dashboardData['sourcingRejected'] = dashboardData.sourcingOrgStatus && dashboardData.sourcingOrgStatus['rejected'];
-              dashboardData['contributorName'] = this.setContributorName(nomination, nomination.organisation_id ? true : false);
-              return {
-                ...dashboardData,
-                contributorDetails: nomination,
-                type: 'individual'
-              };
+              if ((!this.programDetails.target_type || this.programDetails.target_type === 'collections') && !_.isEmpty(this.programCollections)) {
+                dashboardData = _.cloneDeep(this.collectionHierarchyService.getContentCountsForIndividual(contents, nomination.user_id, this.programCollections));
+              } else {
+                dashboardData = _.cloneDeep(this.collectionHierarchyService.getContentCountsForIndividual(contents, nomination.user_id));
+              }
+              if (dashboardData) {
+                dashboardData['sourcingPending'] = dashboardData.sourcingOrgStatus && dashboardData.sourcingOrgStatus['pending'];
+                dashboardData['sourcingAccepted'] = dashboardData.sourcingOrgStatus && dashboardData.sourcingOrgStatus['accepted'];
+                dashboardData['sourcingRejected'] = dashboardData.sourcingOrgStatus && dashboardData.sourcingOrgStatus['rejected'];
+                dashboardData['contributorName'] = this.setContributorName(nomination, nomination.organisation_id ? true : false);
+                return {
+                  ...dashboardData,
+                  contributorDetails: nomination,
+                  type: 'individual'
+                };
+              }
             }
           });
           this.getOverAllCounts(this.contributionDashboardData);
@@ -574,17 +606,21 @@ export class ProgramNominationsComponent implements OnInit, AfterViewInit, OnDes
     };
     this.programsService.get(req).subscribe((programDetails) => {
       this.programDetails = _.get(programDetails, 'result');
+      this.sessionContext.programId = this.programDetails.program_id;
       this.getCollectionCategoryDefinition();
       this.programDetails.config.medium = _.compact(this.programDetails.config.medium);
       this.programDetails.config.subject = _.compact(this.programDetails.config.subject);
       this.programDetails.config.gradeLevel = _.compact(this.programDetails.config.gradeLevel);
       this.sessionContext.framework = _.isArray(_.get(this.programDetails, 'config.framework')) ? _.first(_.get(this.programDetails, 'config.framework')) : _.get(this.programDetails, 'config.framework');
-      this.helperService.fetchProgramFramework(this.sessionContext);
-
+      this.showBulkApprovalButton = this.showBulkApproval();
       this.setTargetCollectionValue();
-
-      forkJoin(this.getAggregatedNominationsCount(), this.getcontentAggregationData()).subscribe(
+      this.frameworkService.initialize(this.sessionContext.framework);   
+      forkJoin(this.frameworkService.readFramworkCategories(this.sessionContext.framework), this.getAggregatedNominationsCount(), 
+              this.getcontentAggregationData(), this.getOriginForApprovedContents()).subscribe(
         (response) => {
+            const frameworkRes = _.first(response);
+            this.sessionContext.frameworkData = _.get(frameworkRes, 'categories');
+            this.sessionContext.topicList = _.get(_.find(this.sessionContext.frameworkData, { code: 'topic' }), 'terms');
             this.checkActiveTab();
         },
         (error) => {
@@ -605,6 +641,8 @@ export class ProgramNominationsComponent implements OnInit, AfterViewInit, OnDes
       this.totalContentTypeCount = programContentTypesArr.length;
       const currentRoles = _.filter(this.programDetails.config.roles, role => this.sessionContext.currentRoles.includes(role.name));
       this.sessionContext.currentRoleIds = !_.isEmpty(currentRoles) ? _.map(currentRoles, role => role.id) : null;
+      this.sessionContext['selectedSharedProperties'] = this.helperService.getSharedProperties(this.programDetails);
+      this.sessionContext = _.assign(this.sessionContext, this.sessionContext['selectedSharedProperties']);
     }, error => {
       const errInfo = {
         errorMsg: this.resourceService.messages.emsg.project.m0001,
@@ -699,7 +737,6 @@ export class ProgramNominationsComponent implements OnInit, AfterViewInit, OnDes
     this.showLoader = false;
     if (this.activeTab === 'textbook') {
       this.showTextbookLoader = true;
-      if(!this.programDetails.target_type ||  this.programDetails.target_type === 'collections'){
         this.programsService.getUserPreferencesforProgram(this.userProfile.identifier, this.programId).subscribe(
           (prefres) => {
             let preffilter = {};
@@ -723,19 +760,15 @@ export class ProgramNominationsComponent implements OnInit, AfterViewInit, OnDes
               this.sourcingService.apiErrorHandling(err, errInfo);
             });
         }, (err) => { // TODO: navigate to program list page
-          this.showTextbookLoader  =  false;
-          const errInfo = {
-            errorMsg: 'Fetching Preferences  failed',
-            telemetryPageId: this.telemetryPageId,
-            telemetryCdata : this.telemetryInteractCdata,
-            env : this.activatedRoute.snapshot.data.telemetry.env,
-          };
-          this.sourcingService.apiErrorHandling(err, errInfo);
-        });
-      } else if (this.programDetails.target_type === 'searchCriteria') {
-        this.programCollections = _.cloneDeep(this.contentAggregationData);
         this.showTextbookLoader  =  false;
-      }
+        const errInfo = {
+          errorMsg: 'Fetching Preferences  failed',
+          telemetryPageId: this.telemetryPageId,
+          telemetryCdata : this.telemetryInteractCdata,
+          env : this.activatedRoute.snapshot.data.telemetry.env,
+        };
+        this.sourcingService.apiErrorHandling(err, errInfo);
+      });
     }
 
     if (this.activeTab === 'nomination') {
@@ -751,29 +784,25 @@ export class ProgramNominationsComponent implements OnInit, AfterViewInit, OnDes
     if (this.activeTab === 'contributionDashboard') {
       this.showDashboardLoader =  true;
       this.logTelemetryImpressionEvent();
-      if (!this.programDetails.target_type || this.programDetails.target_type === 'collections'){
-        this.getProgramCollection().subscribe(
-        (res) => { this.getNominationList(); },
-        (err) => { // TODO: navigate to program list page
-          const errInfo = {
-            errorMsg: 'Fetching textbooks failed',
-            telemetryPageId: this.telemetryPageId,
-            telemetryCdata : this.telemetryInteractCdata,
-            env : this.activatedRoute.snapshot.data.telemetry.env,
-          };
-          this.sourcingService.apiErrorHandling(err, errInfo);
-        });
-      } else {
-        this.programCollections = _.cloneDeep(this.contentAggregationData);
-        this.showDashboardLoader = false;
-      }
+      this.getProgramCollection().subscribe(
+      (res) => { this.getNominationList(); },
+      (err) => { // TODO: navigate to program list page
+        const errInfo = {
+          errorMsg: 'Fetching textbooks failed',
+          telemetryPageId: this.telemetryPageId,
+          telemetryCdata : this.telemetryInteractCdata,
+          env : this.activatedRoute.snapshot.data.telemetry.env,
+        };
+        this.sourcingService.apiErrorHandling(err, errInfo);
+      });
     }
-
     if (this.activeTab === 'report') {
       this.logTelemetryImpressionEvent();
     }
   }
-
+  bulkApprovalSuccess(e) {
+    this.checkActiveTab();
+  }
   readRolesOfOrgUsers(orgUsers) {
     if (_.isEmpty(orgUsers)) {
       return false;
@@ -894,14 +923,6 @@ export class ProgramNominationsComponent implements OnInit, AfterViewInit, OnDes
     if (!_.isEmpty(this.state.stages)) {
       this.currentStage = _.last(this.state.stages).stage;
     }
-    if (this.currentStage !== 'programNominations' && this.currentStage !== 'chapterListComponent') {
-      this.contentHelperService.dynamicInputs$.subscribe((res)=> {
-        this.dynamicInputs = res;
-      });
-      this.contentHelperService.currentOpenedComponent$.subscribe((res)=> {
-        this.component = res;
-      });
-    }
   }
 
   applyPreferences(preferences?) {
@@ -923,8 +944,34 @@ export class ProgramNominationsComponent implements OnInit, AfterViewInit, OnDes
   }
 
   openContent(content) {
-    this.contentHelperService.initialize(this.programDetails, this.sessionContext);
-    this.contentHelperService.openContent(content);
+      this.contentHelperService.initialize(this.programDetails, this.sessionContext);
+      this.contentHelperService.openContent(content).then((response) => {
+        this.dynamicInputs = response['dynamicInputs'];
+        this.component = response['currentComponent'];
+        this.programStageService.addStage(response['currentComponentName']);
+      }).catch((error) => this.toasterService.error('Errror in opening the content componnet'));
+  }
+  getOriginForApprovedContents() {
+    if (!_.isEmpty(this.programDetails.acceptedcontents)) {
+      const originRes = this.collectionHierarchyService.getOriginForApprovedContents(this.programDetails.acceptedcontents);
+      return originRes.pipe(
+        tap((response: any) => {
+        if (_.get(response, 'result.count') && _.get(response, 'result.count') > 0) {
+         const allRes = _.compact(_.concat(_.get(response, 'result.content'), _.get(response, 'result.QuestionSet')));
+          this.sessionContext['contentOrigins'] = {};
+          _.forEach(allRes, (obj) => {
+            if (obj.status == 'Live') {
+              this.sessionContext['contentOrigins'][obj.origin] = obj;
+            }
+          });
+        }
+        }),catchError((error) => {
+        console.log('Getting origin data failed');
+        return of(false);
+      }));
+    } else {
+      return of([]);
+    }
   }
   viewContribution(collection) {
     if (this.programDetails.target_type === 'searchCriteria') {
@@ -935,15 +982,13 @@ export class ProgramNominationsComponent implements OnInit, AfterViewInit, OnDes
     this.sessionContext.programId = this.programDetails.program_id;
     this.sessionContext.collection = collection.identifier;
     this.sessionContext.collectionName = collection.name;
-    this.sessionContext.targetCollectionPrimaryCategory = _.get(collection, 'primaryCategory');
+    this.sessionContext.targetCollectionPrimaryCategory = _.get(collection, 'primaryCategory') || _.first(_.get(this.programDetails, 'target_collection_category'));
     this.sessionContext.telemetryPageDetails = {
       telemetryPageId : this.config.telemetryLabels.pageId.sourcing.projectTargetCollection,
       telemetryInteractCdata: [...this.telemetryInteractCdata, { 'id': collection.identifier, 'type': 'linked_collection'}]
     };
-    this.sharedContext = this.programDetails.config.sharedContext.reduce((obj, context) => {
-      return {...obj, [context]: this.contentHelperService.getSharedContextObjectProperty(context, collection)};
-    }, {});
-    this.sessionContext = _.assign(this.sessionContext, this.sharedContext);
+    const collectionSharedProperties = this.helperService.getSharedProperties(this.programDetails, collection)
+    this.sessionContext = _.assign(this.sessionContext, collectionSharedProperties);
     this.dynamicInputs = {
       chapterListComponentInput: {
         sessionContext: this.sessionContext,
@@ -958,7 +1003,7 @@ export class ProgramNominationsComponent implements OnInit, AfterViewInit, OnDes
     this.programStageService.addStage('chapterListComponent');
     this.setFrameworkCategories(collection);
   }
-
+/*
   getSharedContextObjectProperty(property) {
     if (property === 'channel') {
        return _.get(this.programDetails, 'config.scope.channel');
@@ -977,7 +1022,7 @@ export class ProgramNominationsComponent implements OnInit, AfterViewInit, OnDes
   checkArrayCondition(param) {
     // tslint:disable-next-line:max-line-length
     this.sharedContext[param] = _.isArray(this.sharedContext[param]) ? this.sharedContext[param] : _.split(this.sharedContext[param], ',');
-  }
+  }*/
 
   public isEmptyObject(obj) {
     return !!(_.isEmpty(obj));
