@@ -49,6 +49,5 @@
   "headers": [
     {"label": "Question Type", "key": "questionCategories"},
     {"label": "Skill Tested", "key": "bloomsLevel"}   
-  ],
-  "maxNumberOfTags": 2
+  ]  
 }

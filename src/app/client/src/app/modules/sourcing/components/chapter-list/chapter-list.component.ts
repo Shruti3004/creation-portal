@@ -119,14 +119,12 @@ export class ChapterListComponent implements OnInit, OnChanges, OnDestroy, After
   private buildNumber: string;
   private portalVersion: string;
   public defaultFileSize: any;
-  public defaultVideoSize: any;
+  public defaultVideoSize: any;  
+  dynamicHeaders = [];
   configUrl;
-  dynamicHeaders = [{"label": "Question Type", "key": "questionCategories"},
-  {"label": "Skill Tested", "key": "bloomsLevel"}  ];
   masterCollectionHierarchy = [];
   tags = [];
-  maxNumberOfTags: number = 2;
-  testdata: any;
+  dynamicHeadersEnabled;
 
   constructor(public publicDataService: PublicDataService, public configService: ConfigService,
     private userService: UserService, public actionService: ActionService,
@@ -146,8 +144,8 @@ export class ChapterListComponent implements OnInit, OnChanges, OnDestroy, After
      (<HTMLInputElement>document.getElementById('dockDefaultFileSize')).value : 150;
     this.defaultVideoSize =  (<HTMLInputElement>document.getElementById('dockDefaultVideoSize')) ?
     (<HTMLInputElement>document.getElementById('dockDefaultVideoSize')).value : 15000;
-    this.configUrl =  (<HTMLInputElement>document.getElementById('cloudStorageUrls')) ?
-    (<HTMLInputElement>document.getElementById('cloudStorageUrls')).value : "";
+    this.configUrl =  (<HTMLInputElement>document.getElementById('portalCloudStorageUrl')) ?
+    (<HTMLInputElement>document.getElementById('portalCloudStorageUrl')).value : "";
   }
 
   ngOnInit() {
@@ -239,8 +237,7 @@ export class ChapterListComponent implements OnInit, OnChanges, OnDestroy, After
 
     this.selectedStatusOptions = ["Live", "Approved"];
     this.displayPrintPreview = _.get(this.collection, 'printable', false);
-    // this.dynamicHeaders = _.get(this.collection, 'headers', []);
-    this.maxNumberOfTags = _.get(this.collection, 'maxNumberOfTags', 2);   
+    // this.dynamicHeaders = _.get(this.collection, 'headers', []);    
   }
 
   setUserAccess() {
@@ -435,8 +432,7 @@ export class ChapterListComponent implements OnInit, OnChanges, OnDestroy, After
     this.viewBlueprintDetailsFlag = true;
   }
 
-  getCollectionCategoryDefinition() {   
-    console.log("TEST", this.testdata);
+  getCollectionCategoryDefinition() {       
     if (this.programContext.target_collection_category && this.programContext.rootorg_id) {
       // tslint:disable-next-line:max-line-length
       this.programsService.getCategoryDefinition(this.programContext.target_collection_category[0], this.programContext.rootorg_id,
@@ -458,6 +454,10 @@ export class ChapterListComponent implements OnInit, OnChanges, OnDestroy, After
             });
           }
           this.setLocalBlueprint();
+        }
+
+        if (_.has(objectCategoryDefinition, "objectMetadata.config.sourcingSettings.collection.dynamicHeadersEnabled")) {
+          this.dynamicHeadersEnabled = objectCategoryDefinition.objectMetadata.config.sourcingSettings.collection.dynamicHeadersEnabled;
         }
 
         if (_.has(objectCategoryDefinition, "forms.childMetadata.properties") && this.frameworkService.orgFrameworkCategories) {
